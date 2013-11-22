@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>DogeDraw - wow! amaze! such live! much draw!</title>
+  <meta property="og:title" content="DogeDraw - wow! amaze! such live! much draw!" />
+  <meta property="og:description" content="Doge Doge Doge Doge Doge Doge Wow" />
+  <meta property="og:url" content="http://dogedraw.com" />
+  <meta property="og:image" content="http://dogedraw.com/img/doge-lge.png" />  
+  <link rel="shortcut icon" href="img/favicon.png">
+  <script src="https://cdn.firebase.com/v0/firebase.js"></script>
+  <script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>
+  <style>
+  html, body {
+  	width: 100%;
+  	height: 100%;
+  	margin: 0;
+  	padding: 0;
+  	overflow: hidden;
+  }
+  html, body, div, p, h1, h2, h3 {
+  	font-family: Comic Sans, Comic Sans MS, cursive;
+  }
+  #such-color {
+  	padding: 10px 0;
+  	background: #222;
+    }
+  .colorbox {
+  	width: 30px;
+  	height: 30px;
+  	margin: 5px 10px;
+  	display: inline-block;
+  	border: 5px solid white;
+  	cursor: pointer;
+  }
+  #canvas-wrap {
+  	position: relative;
+  }
+  #wow-draw {
+  	display:block;
+  	cursor:url('img/doge.png'), pointer;
+  }
+  .much-doge {
+  	position: absolute;
+  	z-index: 99;
+    pointer-events:none;
+    width: 100%;
+  }
+  #doge-text {
+  	position: absolute;
+  	z-index: 9999;
+  	font-size: 30px;
+  	font-weight: bold;
+    text-shadow: #444 1px 2px;
+  }
+  #mo-doge-text {
+  	left: 130px;
+  	position: absolute;
+  	z-index: 9999;
+  	font-size: 30px;
+  	font-weight: bold;
+  	top: 60px;
+  	width: 100%;
+    text-shadow: #444 1px 2px;
+  }
+  #pause {
+    float: right;
+    line-height: 50px;
+    cursor: pointer;
+    color: #fff;
+    padding-right: 30px;
+  }
+  </style>
+</head>
+<body>
+<!-- oh fuck no, autoplaying music, how 90s -->
+<audio id="badasstunes" autoplay loop>
+  <source src="fuckinproblem.mp3">
+</audio>
+<div id="such-color"><div id="pause">shhh plz!</div></div>
+<div id="canvas-wrap">
+  <canvas id="wow-draw"></canvas>
+  <div id="doge-text"></div>
+</div>
+
+<script>
+  $(document).ready(function () {
+
+    //globals yo
+    var pixSize = 10, lastPoint = null, currentColor = "000", mouseDown = 0;
+
+    //dis shit be firebase
+    var userListRef = new Firebase('https://dogedraw.firebaseio.com/users');
+    var pixelDataRef = new Firebase('https://dogedraw.firebaseio.com/pixels');
+
+    //roll some canvas
+    var canvas = document.getElementById('wow-draw'); 
+    var ctx = canvas.getContext ? canvas.getContext('2d') : null;
+    ctx.canvas.width  = window.innerWidth;
+  	ctx.canvas.height = window.innerHeight;
+    if (ctx == null) {
+      alert("You must use a browser that supports HTML5 Canvas to run this demo.");
+      return;
+    }
+
+    //throw some colors
+    var colors = ["fff","000","f00","0f0","00f","88f","f8d","f88","f05","f80","0f8","cf0","08f","408","ff8","8ff"];
+    for (c in colors) {
+      var item = $('<div/>').css("background-color", '#' + colors[c]).addClass("colorbox");
+      item.click((function () {
+        var col = colors[c];
+        return function () {
+          currentColor = col;
+          $('#doge-text').css('color','#' + currentColor);
+          user.update({txtCol:currentColor});
+        };
+      })());
+      item.appendTo('#such-color');
+    }
+
+
+    //mouse down or mouse up?
+    canvas.onmousedown = function () {mouseDown = 1;};
+    canvas.onmouseout = canvas.onmouseup = function () {
+      mouseDown = 0; lastPoint = null;
+    };
+
+    //draw a line
+    var drawLineOnMouseMove = function(e) {
+      if (!mouseDown) return;
+      e.preventDefault();
+
+      //Bresenham's line algorithm. We use this to ensure smooth lines
+      var offset = $('canvas').offset();
+      var x1 = Math.floor((e.pageX - offset.left) / pixSize - 1),
+        y1 = Math.floor((e.pageY - offset.top) / pixSize - 1);
+      var x0 = (lastPoint == null) ? x1 : lastPoint[0];
+      var y0 = (lastPoint == null) ? y1 : lastPoint[1];
+      var dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+      var sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1, err = dx - dy;
+      while (true) {
+        //write the pixel into Firebase, or if we are drawing white, remove the pixel
+        pixelDataRef.child(x0 + ":" + y0).set(currentColor === "fff" ? null : currentColor);
+        if (x0 == x1 && y0 == y1) break;
+        var e2 = 2 * err;
+        if (e2 > -dy) {
+          err = err - dy;
+          x0 = x0 + sx;
+        }
+        if (e2 < dx) {
+          err = err + dx;
+          y0 = y0 + sy;
+        }
+      }
+      lastPoint = [x1, y1];
+    };
+
+    //watch mouse movements
+    $(canvas).mousemove(function(e){
+    	drawLineOnMouseMove(e);
+    	updateCursorPos(e);
+    });
+    $(canvas).mousedown(drawLineOnMouseMove);
+
+    //Firebase listeners
+    var drawPixel = function(snapshot) {
+      var coords = snapshot.name().split(":");
+      ctx.fillStyle = "#" + snapshot.val();
+      ctx.fillRect(parseInt(coords[0]) * pixSize, parseInt(coords[1]) * pixSize, pixSize, pixSize);
+    };
+    var clearPixel = function(snapshot) {
+      var coords = snapshot.name().split(":");
+      ctx.clearRect(parseInt(coords[0]) * pixSize, parseInt(coords[1]) * pixSize, pixSize, pixSize);
+    };
+    pixelDataRef.on('child_added', drawPixel);
+    pixelDataRef.on('child_changed', drawPixel);
+    pixelDataRef.on('child_removed', clearPixel);
+
+
+    //WOW. MUCH CUSTOM
+
+    //update the cusor position on Firebase
+    function updateCursorPos(event) {
+    	var y = event.pageY - 70;
+    	user.update({pos:event.pageX + ':' + y});
+    	$('#doge-text').css({'left': event.pageX + 130 + 'px','top': y + 60 + 'px'});
+    }
+  	var user = userListRef.push();
+    var userId = user.name();
+      user.set({pos:''});
+      user.onDisconnect().remove();
+    
+    //append doge images of other users
+  	var dogeAdd = function(snapshot){
+  		$('#canvas-wrap').append('<div id="'+snapshot.name()+'" class="much-doge"><img src="img/doge.png"><div id="mo-doge-text"></div></div>');
+  	}
+    //update the doge image positioning and color
+    var dogeChange = function(snapshot){
+    	var id = snapshot.name();
+    	if (id != userId){
+    		//change position
+    		var pos = snapshot.val().pos.split(":");
+    		$('#'+id).css({'left': pos[0] + 'px', 'top': pos[1] + 'px'});
+    		//add text
+    		$('#'+id).find('#mo-doge-text').html(snapshot.val().txt);
+    		$('#'+id).find('#mo-doge-text').css('color','#'+snapshot.val().txtCol);
+    	}
+    }
+    //doge remove, such sad
+  	var dogeRemove = function(snapshot){
+  		$('#'+snapshot.name()).remove();
+  	}
+    userListRef.on('child_added', dogeAdd);
+    userListRef.on('child_changed', dogeChange);
+    userListRef.on('child_removed', dogeRemove);
+
+    //very typing, do much
+  	$(document).on('keydown', function(e) {
+      e.preventDefault();
+  		if (e.keyCode==8) { //backspace
+  			$('#doge-text').html($('#doge-text').text().slice(0,-1));
+  		} else {
+  			var dogeText = String.fromCharCode(e.keyCode).toLowerCase();
+  	  	$('#doge-text').append(dogeText);
+  	  }
+  	  user.update({txt:$('#doge-text').text()});
+  	});
+
+    //toggle badass tunes
+    $('#pause').on('click', function() {
+      var audio = $('#badasstunes')[0];
+      if (audio.paused == false) {
+          audio.pause();
+          $(this).text('moar sownd!');
+      } else {
+          audio.play();
+          $(this).text('shhh plz!');
+      }
+    });
+
+    //show dem bitches how to use this thang
+    var txt = 'wow! such amaze! type much! very share!';
+    var timeOut;
+    var txtLen = txt.length;
+    var char = 0;
+    setTimeout(function(){
+      $('#doge-text').text('|');
+      (function typeIt() {   
+          var humanize = Math.round(Math.random() * (200 - 30)) + 30;
+          timeOut = setTimeout(function() {
+              char++;
+              var type = txt.substring(0, char);
+              $('#doge-text').text(type + '|');
+              typeIt();
+              if (char == txtLen) {
+                  $('#doge-text').text($('#doge-text').text().slice(0, -1)); // remove the '|'
+                  clearTimeout(timeOut);
+                  setTimeout(function(){
+                    $('#doge-text').text('');
+                  }, 3000);
+              }
+          }, humanize);
+      }());
+    }, 5000);
+
+
+  });
+</script>
+<!-- evil Google -->
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-248344-18', 'dogedraw.com');
+  ga('send', 'pageview');
+</script>
+</body>
+</html>
